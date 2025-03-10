@@ -2,8 +2,15 @@
 #define _DEFAULT_SOURCE 1
 #endif
 
-// #define COOLEY_TUKEY
+#include <time.h>
+
+// FFT Configuration
+#define FFT_SIZE 256     // Number of samples for FFT. MUST be a power of 2.
+#define SAMPLE_RATE 2048 // Sampling frequency in Hz
+
+#define COOLEY_TUKEY
 #define ATSAM
+#define GOERTZEL
 
 #ifdef COOLEY_TUKEY
 
@@ -11,10 +18,6 @@
 #include <stdio.h>
 #include <math.h>
 #include <complex.h>
-
-// FFT Configuration
-#define FFT_SIZE 256     // Number of samples for FFT. MUST be a power of 2.
-#define SAMPLE_RATE 2048 // Sampling frequency in Hz
 
 // Input buffer
 float inputBuffer[FFT_SIZE];
@@ -219,7 +222,7 @@ float MajorPeak()
     return (float)peakIndex * SAMPLE_RATE / FFT_SIZE; // frequency = index * sampleRate / FFT_SIZE [3]
 }
 
-int main()
+void cooleyTukey()
 {
     // Fill input buffer with sample data (replace with your actual data)
     for (int i = 0; i < FFT_SIZE; i++)
@@ -245,8 +248,6 @@ int main()
     // Calculate magnitudes
     ComplexToMagnitude();
 
-    // Print the frequency spectrum
-    printf("Frequency Spectrum:\n");
     float threshold = 1.0; // Threshold for printing peaks (adjust as needed)
 
     for (int i = 1; i < FFT_SIZE / 2; i++)
@@ -257,11 +258,9 @@ int main()
         // Simple peak detection: check if this magnitude is greater than its neighbors AND above the threshold
         if (i > 1 && i < (FFT_SIZE / 2) - 1 && magnitude > real[i - 1] && magnitude > real[i + 1] && magnitude > threshold)
         {
-            printf("Frequency: %.2f Hz, Magnitude: %.2f (Peak)\n", frequency, magnitude); // Print peak
+            printf("Magnitude at %.2f Hz: %.2f\n", frequency, magnitude);
         }
     }
-
-    return 0;
 }
 
 #endif
@@ -270,10 +269,6 @@ int main()
 
 #include <math.h>
 #include <stdio.h>
-
-// FFT Configuration
-#define FFT_SIZE 256     // Number of samples for FFT. MUST be a power of 2.
-#define SAMPLE_RATE 2048 // Sampling frequency in Hz
 
 // Input signal (example)
 // Array to store the input signal data for FFT processing.
@@ -342,16 +337,7 @@ void fft(Complex *v, int n, Complex *tmp)
     }
 }
 
-/**
- * @brief Main function to generate a test signal, compute its FFT, and display detected frequency peaks.
- *
- * This function generates a test signal composed of three frequency components,
- * converts it into a complex signal, computes its FFT, calculates the magnitude spectrum,
- * maps FFT bins to frequency values, and then performs simple peak detection.
- *
- * @return int Returns 0 on successful execution.
- */
-int main(void)
+void atsam(void)
 {
     // Declare arrays for FFT processing: 'v' for the complex signal and 'tmp' as temporary storage.
     Complex v[FFT_SIZE], tmp[FFT_SIZE];
@@ -400,11 +386,112 @@ int main(void)
             magnitude[i] > magnitude[i + 1] &&
             magnitude[i] > 1.0)
         {
-            printf("Frequency: %.2f Hz, Magnitude: %.2f (Peak)\n", frequency[i], magnitude[i]);
+            printf("Magnitude at %.2f Hz: %.2f\n", frequency[i], magnitude[i]);
         }
     }
-
-    return 0;
 }
 
 #endif
+
+#ifdef GOERTZEL
+
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+
+/**
+ * @brief Computes the magnitude of a target frequency using the Goertzel algorithm.
+ *
+ * @param samples         The input signal array.
+ * @param numSamples      Number of samples in the input signal.
+ * @param targetFrequency The frequency (in Hz) to analyze.
+ * @param sampleRate      The sampling frequency of the signal.
+ * @return float          Magnitude of the target frequency component.
+ */
+float compute(const float samples[], int numSamples, float targetFrequency, float sampleRate)
+{
+    double s_prev = 0.0;
+    double s_prev2 = 0.0;
+    // Compute the normalized frequency (radians per sample)
+    double omega = (2.0 * M_PI * targetFrequency) / sampleRate;
+    // Precompute the coefficient used in the recurrence
+    double coeff = 2.0 * cos(omega);
+
+    // Process all samples
+    for (int i = 0; i < numSamples; i++)
+    {
+        double s = samples[i] + coeff * s_prev - s_prev2;
+        s_prev2 = s_prev;
+        s_prev = s;
+    }
+
+    // Compute the real and imaginary parts of the result
+    double real_part = s_prev - s_prev2 * cos(omega);
+    double imag_part = s_prev2 * sin(omega);
+
+    // Return the magnitude of the frequency component
+    return (float)sqrt(real_part * real_part + imag_part * imag_part);
+}
+
+void Goertzel(void)
+{
+    float inputBuffer[FFT_SIZE];
+
+    // Generate a test signal: combining three sine waves (16 Hz, 200 Hz, 1000 Hz)
+    for (int i = 0; i < FFT_SIZE; i++)
+    {
+        inputBuffer[i] = (0.50 * sin(2 * M_PI * 16 * i / SAMPLE_RATE)) +
+                         (0.20 * sin(2 * M_PI * 200 * i / SAMPLE_RATE)) +
+                         (0.30 * sin(2 * M_PI * 1000 * i / SAMPLE_RATE));
+    }
+
+    // Choose a target frequency to analyze with Goertzel
+    float targetFrequency = 16.0;
+    float magnitude = compute(inputBuffer, FFT_SIZE, targetFrequency, SAMPLE_RATE);
+    printf("Magnitude at %.2f Hz: %.2f\n", targetFrequency, magnitude);
+
+    targetFrequency = 200.0;
+    magnitude = compute(inputBuffer, FFT_SIZE, targetFrequency, SAMPLE_RATE);
+    printf("Magnitude at %.2f Hz: %.2f\n", targetFrequency, magnitude);
+
+    targetFrequency = 1000.0;
+    magnitude = compute(inputBuffer, FFT_SIZE, targetFrequency, SAMPLE_RATE);
+    printf("Magnitude at %.2f Hz: %.2f\n", targetFrequency, magnitude);
+}
+
+#endif
+
+int main(void)
+{
+    clock_t start, end;
+    double elapsed;
+
+#ifdef COOLEY_TUKEY
+    start = clock();
+    printf("Cooley Tukey Algorithm\n");
+    cooleyTukey();
+    end = clock();
+    elapsed = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf("Time taken: %f seconds\n\n", elapsed);
+#endif
+
+#ifdef ATSAM
+    start = clock();
+    printf("Microchip ATSAM Algorithm\n");
+    atsam();
+    end = clock();
+    elapsed = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf("Time taken: %f seconds\n\n", elapsed);
+#endif
+
+#ifdef GOERTZEL
+    start = clock();
+    printf("Goertzel Algorithm\n");
+    Goertzel();
+    end = clock();
+    elapsed = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf("Time taken: %f seconds\n\n", elapsed);
+#endif
+
+    return 0;
+}
