@@ -12,15 +12,16 @@
 #define ATSAM
 #define GOERTZEL
 
+// Array to store the input signal data for FFT processing.
+double inputSignal[FFT_SIZE];
+float inputBuffer[FFT_SIZE];
+
 #ifdef COOLEY_TUKEY
 
 #include <stdint.h>
 #include <stdio.h>
 #include <math.h>
 #include <complex.h>
-
-// Input buffer
-float inputBuffer[FFT_SIZE];
 
 // Output buffers: real and imaginary parts of the FFT
 float real[FFT_SIZE];
@@ -227,11 +228,6 @@ void cooleyTukey()
     // Fill input buffer with sample data (replace with your actual data)
     for (int i = 0; i < FFT_SIZE; i++)
     {
-        // Create a test signal with three frequency components: 10 Hz, 200 Hz, and 1000 Hz
-        inputBuffer[i] = (0.50 * sin(2 * M_PI * 16 * i / SAMPLE_RATE)) +
-                         (0.20 * sin(2 * M_PI * 200 * i / SAMPLE_RATE)) +
-                         (0.30 * sin(2 * M_PI * 1000 * i / SAMPLE_RATE));
-
         real[i] = inputBuffer[i]; // Copy input data to real part of FFT input
         imag[i] = 0;              // Initialize imaginary part to 0
     }
@@ -269,10 +265,6 @@ void cooleyTukey()
 
 #include <math.h>
 #include <stdio.h>
-
-// Input signal (example)
-// Array to store the input signal data for FFT processing.
-double inputSignal[FFT_SIZE] = {/* Your input signal data */};
 
 // Complex number structure for FFT processing and output.
 typedef struct
@@ -346,10 +338,6 @@ void atsam(void)
     // (Note: The comment mentions 10 Hz, but the code uses 16 Hz for the first component.)
     for (int i = 0; i < FFT_SIZE; i++)
     {
-        inputSignal[i] = (0.50 * sin(2 * M_PI * 16 * i / SAMPLE_RATE)) +
-                         (0.20 * sin(2 * M_PI * 200 * i / SAMPLE_RATE)) +
-                         (0.30 * sin(2 * M_PI * 1000 * i / SAMPLE_RATE));
-
         // Initialize the complex array 'v' using the input signal.
         v[i].real = inputSignal[i]; // Real part from the input signal.
         v[i].imag = 0.0;            // Imaginary part is set to zero.
@@ -435,16 +423,6 @@ float compute(const float samples[], int numSamples, float targetFrequency, floa
 
 void Goertzel(void)
 {
-    float inputBuffer[FFT_SIZE];
-
-    // Generate a test signal: combining three sine waves (16 Hz, 200 Hz, 1000 Hz)
-    for (int i = 0; i < FFT_SIZE; i++)
-    {
-        inputBuffer[i] = (0.50 * sin(2 * M_PI * 16 * i / SAMPLE_RATE)) +
-                         (0.20 * sin(2 * M_PI * 200 * i / SAMPLE_RATE)) +
-                         (0.30 * sin(2 * M_PI * 1000 * i / SAMPLE_RATE));
-    }
-
     // Choose a target frequency to analyze with Goertzel
     float targetFrequency = 16.0;
     float magnitude = compute(inputBuffer, FFT_SIZE, targetFrequency, SAMPLE_RATE);
@@ -465,6 +443,17 @@ int main(void)
 {
     clock_t start, end;
     double elapsed;
+
+    // Fill input buffer with sample data (replace with your actual data)
+    for (int i = 0; i < FFT_SIZE; i++)
+    {
+        // Create a test signal with three frequency components: 10 Hz, 200 Hz, and 1000 Hz
+        inputBuffer[i] = (0.50 * sin(2 * M_PI * 16 * i / SAMPLE_RATE)) +
+                         (0.20 * sin(2 * M_PI * 200 * i / SAMPLE_RATE)) +
+                         (0.30 * sin(2 * M_PI * 1000 * i / SAMPLE_RATE));
+
+        inputSignal[i] = inputBuffer[i];
+    }
 
 #ifdef COOLEY_TUKEY
     start = clock();
