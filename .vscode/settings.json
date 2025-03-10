@@ -1,0 +1,12 @@
+{
+    "files.associations": {
+        "*.conf": "ssh_config",
+        "*.bb": "ssh_config",
+        "*.bbappend": "ssh_config",
+        "*.inc": "ssh_config",
+        "*.bbclass": "ssh_config",
+        "*.toml": "toml",
+        "*.tcss": "css",
+        "stdio.h": "c"
+    }
+}

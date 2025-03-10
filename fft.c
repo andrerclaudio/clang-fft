@@ -2,14 +2,19 @@
 #define _DEFAULT_SOURCE 1
 #endif
 
+// #define COOLEY_TUKEY
+#define ATSAM
+
+#ifdef COOLEY_TUKEY
+
 #include <stdint.h>
 #include <stdio.h>
 #include <math.h>
 #include <complex.h>
 
 // FFT Configuration
-#define FFT_SIZE 2048    // Number of samples for FFT. MUST be a power of 2.
-#define SAMPLE_RATE 4096 // Sampling frequency in Hz
+#define FFT_SIZE 256     // Number of samples for FFT. MUST be a power of 2.
+#define SAMPLE_RATE 2048 // Sampling frequency in Hz
 
 // Input buffer
 float inputBuffer[FFT_SIZE];
@@ -220,7 +225,7 @@ int main()
     for (int i = 0; i < FFT_SIZE; i++)
     {
         // Create a test signal with three frequency components: 10 Hz, 200 Hz, and 1000 Hz
-        inputBuffer[i] = (0.02 * sin(2 * M_PI * 10 * i / SAMPLE_RATE)) +
+        inputBuffer[i] = (0.50 * sin(2 * M_PI * 16 * i / SAMPLE_RATE)) +
                          (0.20 * sin(2 * M_PI * 200 * i / SAMPLE_RATE)) +
                          (0.30 * sin(2 * M_PI * 1000 * i / SAMPLE_RATE));
 
@@ -242,7 +247,7 @@ int main()
 
     // Print the frequency spectrum
     printf("Frequency Spectrum:\n");
-    float threshold = 0.04; // Threshold for printing peaks (adjust as needed)
+    float threshold = 1.0; // Threshold for printing peaks (adjust as needed)
 
     for (int i = 1; i < FFT_SIZE / 2; i++)
     {
@@ -254,15 +259,152 @@ int main()
         {
             printf("Frequency: %.2f Hz, Magnitude: %.2f (Peak)\n", frequency, magnitude); // Print peak
         }
-        else
+    }
+
+    return 0;
+}
+
+#endif
+
+#ifdef ATSAM
+
+#include <math.h>
+#include <stdio.h>
+
+// FFT Configuration
+#define FFT_SIZE 256     // Number of samples for FFT. MUST be a power of 2.
+#define SAMPLE_RATE 2048 // Sampling frequency in Hz
+
+// Input signal (example)
+// Array to store the input signal data for FFT processing.
+double inputSignal[FFT_SIZE] = {/* Your input signal data */};
+
+// Complex number structure for FFT processing and output.
+typedef struct
+{
+    double real; ///< Real part of the complex number.
+    double imag; ///< Imaginary part of the complex number.
+} Complex;
+
+// Output buffer for FFT results.
+Complex fftOutput[FFT_SIZE];
+
+// Buffer for storing magnitude of FFT results (only the first half is needed due to symmetry).
+double magnitude[FFT_SIZE / 2];
+
+// Buffer for corresponding frequency values for each FFT bin.
+double frequency[FFT_SIZE / 2];
+
+/**
+ * @brief Compute the Fast Fourier Transform (FFT) of a complex input array.
+ *
+ * This function recursively computes the FFT of an array of Complex numbers.
+ * It divides the input into even and odd indexed elements, computes their FFT,
+ * and then combines the results using the butterfly operation.
+ *
+ * @param v Pointer to the array of Complex numbers. On input, it contains time-domain samples.
+ *          On output, it holds the FFT result.
+ * @param n Number of samples in the array. Must be a power of 2.
+ * @param tmp Pointer to a temporary buffer array of Complex numbers of size n.
+ */
+void fft(Complex *v, int n, Complex *tmp)
+{
+    if (n > 1)
+    {
+        int k, m;
+        Complex z, w, *vo, *ve;
+        // Split input array into even and odd indexed elements.
+        ve = tmp;         // Even-indexed elements.
+        vo = tmp + n / 2; // Odd-indexed elements.
+        for (k = 0; k < n / 2; k++)
         {
-            // Only print if above threshold
-            if (magnitude > threshold)
-            {
-                printf("Frequency: %.2f Hz, Magnitude: %.2f\n", frequency, magnitude); // Print non-peak
-            }
+            ve[k] = v[2 * k];     // Even indices.
+            vo[k] = v[2 * k + 1]; // Odd indices.
+        }
+        // Recursively compute FFT on even and odd parts.
+        fft(ve, n / 2, v);
+        fft(vo, n / 2, v);
+        // Combine the two halves using the butterfly operation.
+        for (m = 0; m < n / 2; m++)
+        {
+            // Compute the twiddle factor: e^(-j*2*pi*m/n)
+            w.real = cos(2 * M_PI * m / (double)n);
+            w.imag = -sin(2 * M_PI * m / (double)n);
+            // Multiply the odd part by the twiddle factor.
+            z.real = w.real * vo[m].real - w.imag * vo[m].imag;
+            z.imag = w.real * vo[m].imag + w.imag * vo[m].real;
+            // Combine even and odd parts to form the FFT output.
+            v[m].real = ve[m].real + z.real;
+            v[m].imag = ve[m].imag + z.imag;
+            v[m + n / 2].real = ve[m].real - z.real;
+            v[m + n / 2].imag = ve[m].imag - z.imag;
+        }
+    }
+}
+
+/**
+ * @brief Main function to generate a test signal, compute its FFT, and display detected frequency peaks.
+ *
+ * This function generates a test signal composed of three frequency components,
+ * converts it into a complex signal, computes its FFT, calculates the magnitude spectrum,
+ * maps FFT bins to frequency values, and then performs simple peak detection.
+ *
+ * @return int Returns 0 on successful execution.
+ */
+int main(void)
+{
+    // Declare arrays for FFT processing: 'v' for the complex signal and 'tmp' as temporary storage.
+    Complex v[FFT_SIZE], tmp[FFT_SIZE];
+
+    // Generate a test signal with three frequency components: 16 Hz, 200 Hz, and 1000 Hz.
+    // (Note: The comment mentions 10 Hz, but the code uses 16 Hz for the first component.)
+    for (int i = 0; i < FFT_SIZE; i++)
+    {
+        inputSignal[i] = (0.50 * sin(2 * M_PI * 16 * i / SAMPLE_RATE)) +
+                         (0.20 * sin(2 * M_PI * 200 * i / SAMPLE_RATE)) +
+                         (0.30 * sin(2 * M_PI * 1000 * i / SAMPLE_RATE));
+
+        // Initialize the complex array 'v' using the input signal.
+        v[i].real = inputSignal[i]; // Real part from the input signal.
+        v[i].imag = 0.0;            // Imaginary part is set to zero.
+    }
+
+    // Perform the FFT on the complex signal.
+    fft(v, FFT_SIZE, tmp);
+
+    // Copy the FFT results to the global output buffer.
+    for (int i = 0; i < FFT_SIZE; i++)
+    {
+        fftOutput[i] = v[i];
+    }
+
+    // Calculate the magnitude for each FFT bin (only the first half is needed due to symmetry).
+    for (int i = 0; i < FFT_SIZE / 2; i++)
+    {
+        magnitude[i] = sqrt(fftOutput[i].real * fftOutput[i].real +
+                            fftOutput[i].imag * fftOutput[i].imag);
+    }
+
+    // Compute the frequency corresponding to each FFT bin.
+    for (int i = 0; i < FFT_SIZE / 2; i++)
+    {
+        frequency[i] = (SAMPLE_RATE / FFT_SIZE) * i;
+    }
+
+    // Detect and print peaks in the magnitude spectrum.
+    // A peak is defined as a point that is greater than its immediate neighbors and above a set threshold.
+    for (int i = 1; i < FFT_SIZE / 2; i++)
+    {
+        if (i > 1 && i < (FFT_SIZE / 2) - 1 &&
+            magnitude[i] > magnitude[i - 1] &&
+            magnitude[i] > magnitude[i + 1] &&
+            magnitude[i] > 1.0)
+        {
+            printf("Frequency: %.2f Hz, Magnitude: %.2f (Peak)\n", frequency[i], magnitude[i]);
         }
     }
 
     return 0;
 }
+
+#endif
